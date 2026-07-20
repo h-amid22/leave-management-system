@@ -8,18 +8,177 @@ datasource db {
 
 generator client {
   provider = "prisma-client"
-  // In Prisma 7, we output the client locally to avoid node_modules caching issues
   output   = "../generated/prisma"
 }
 
 // ---------------------------------------------------------
-// DATABASE MODELS (Define your tables here)
+// ENUMS
 // ---------------------------------------------------------
 
+enum UserRole {
+  EMPLOYEE
+  MANAGER
+  HR
+  ADMIN
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+}
+
+// ---------------------------------------------------------
+// ORGANIZATION
+// ---------------------------------------------------------
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  email          String   @unique
+  name           String
+  role           UserRole @default(EMPLOYEE)
+  employeeNumber String?  @unique
+  authProviderId String?  @unique
+  isActive       Boolean  @default(true)
+  departmentId   String?
+  managerId      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  manager    User?       @relation("UserManager", fields: [managerId], references: [id], onDelete: Restrict)
+  reports    User[]      @relation("UserManager")
+
+  leaveRequests  LeaveRequest[] @relation("LeaveRequester")
+  leaveBalances  LeaveBalance[]
+  approvals      Approval[]     @relation("ApprovalApprover")
+  cancelledLeave LeaveRequest[] @relation("LeaveCancelledBy")
+
+  @@index([departmentId])
+  @@index([managerId])
+  @@index([role, isActive])
+}
+
+// ---------------------------------------------------------
+// LEAVE CONFIGURATION
+// ---------------------------------------------------------
+
+model LeaveType {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String   @unique
+  description String?
+  isPaid      Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  policies LeavePolicy[]
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+}
+
+model LeavePolicy {
+  id                String   @id @default(uuid())
+  leaveTypeId       String
+  name              String
+  allowanceDays     Decimal  @db.Decimal(6, 2)
+  maximumCarryOver  Decimal  @default(0) @db.Decimal(6, 2)
+  allowNegative     Boolean  @default(false)
+  effectiveFrom     DateTime @db.Date
+  effectiveTo       DateTime? @db.Date
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([leaveTypeId, effectiveFrom])
+  @@index([leaveTypeId, effectiveFrom, effectiveTo])
+}
+
+// ---------------------------------------------------------
+// LEAVE BALANCES AND REQUESTS
+// ---------------------------------------------------------
+
+model LeaveBalance {
+  id            String   @id @default(uuid())
+  userId        String
+  leaveTypeId   String
+  year          Int
+  entitledDays  Decimal  @db.Decimal(6, 2)
+  carriedDays   Decimal  @default(0) @db.Decimal(6, 2)
+  usedDays      Decimal  @default(0) @db.Decimal(6, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, leaveTypeId, year])
+  @@index([leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id            String             @id @default(uuid())
+  requesterId   String
+  leaveTypeId   String
+  startDate     DateTime           @db.Date
+  endDate       DateTime           @db.Date
+  requestedDays Decimal            @db.Decimal(6, 2)
+  reason        String?
+  status        LeaveRequestStatus @default(PENDING)
+  submittedAt   DateTime           @default(now())
+  decidedAt     DateTime?
+  cancelledAt   DateTime?
+  cancelledById String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  requester   User       @relation("LeaveRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  leaveType   LeaveType  @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  cancelledBy User?      @relation("LeaveCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  approvals   Approval[]
+
+  @@index([requesterId, status])
+  @@index([leaveTypeId])
+  @@index([status, submittedAt])
+  @@index([startDate, endDate])
+}
+
+model Approval {
+  id             String         @id @default(uuid())
+  leaveRequestId String
+  approverId     String
+  step           Int            @default(1)
+  status         ApprovalStatus @default(PENDING)
+  comment        String?
+  decidedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
+  approver     User         @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@unique([leaveRequestId, step])
+  @@index([approverId, status])
+  @@index([leaveRequestId, status])
 }
