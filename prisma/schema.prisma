@@ -1,0 +1,25 @@
+// ---------------------------------------------------------
+// DATABASE CONFIGURATION
+// ---------------------------------------------------------
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  // In Prisma 7, we output the client locally to avoid node_modules caching issues
+  output   = "../generated/prisma"
+}
+
+// ---------------------------------------------------------
+// DATABASE MODELS (Define your tables here)
+// ---------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
