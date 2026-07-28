@@ -2,6 +2,8 @@ import { PrismaClient } from "./generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
+import { getDatabaseEnv } from "./lib/env";
+
 // ---------------------------------------------------------
 // PRISMA CLIENT INITIALIZATION (FOR PRISMA 7 + POSTGRESQL)
 // ---------------------------------------------------------
@@ -13,7 +15,14 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 // 1. Create or reuse the PostgreSQL connection pool (Uses POOLED DATABASE_URL)
-const pool = globalForPrisma.pool ?? new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pool =
+  globalForPrisma.pool ??
+  new pg.Pool({
+    connectionString: getDatabaseEnv().DATABASE_URL,
+    max: 10,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+  });
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.pool = pool;

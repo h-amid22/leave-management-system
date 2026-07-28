@@ -72,10 +72,34 @@ model User {
   leaveBalances  LeaveBalance[]
   approvals      Approval[]     @relation("ApprovalApprover")
   cancelledLeave LeaveRequest[] @relation("LeaveCancelledBy")
+  auditEvents    AuditEvent[]   @relation("AuditActor")
 
   @@index([departmentId])
   @@index([managerId])
   @@index([role, isActive])
+}
+
+model AuditEvent {
+  id               String   @id @default(uuid()) @db.Text
+  createdAt        DateTime @default(now())
+  actorUserId      String?  @db.Text
+  actorName        String
+  actorRole        String
+  targetEntityType String
+  targetEntityId   String?
+  action           String
+  metadata         Json     @default("{}")
+  requestId        String
+  ipAddress        String?
+  userAgent        String?
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetEntityType, targetEntityId])
+  @@index([requestId])
 }
 
 // ---------------------------------------------------------
